@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>交通ラジオ</title>
+<style>
+body{font-family:-apple-system;text-align:center;padding:40px}
+button{font-size:24px;padding:20px 30px}
+</style>
+</head>
+<body>
+<h2>交通ラジオ</h2>
+<button onclick="play()">▶ 交通情報を聞く</button>
+<audio id="a"></audio>
+<script>
+async function play(){
+ const res = await fetch("https://api.allorigins.win/raw?url=https://www.drivetraffic.jp/traffic/area/13");
+ const data = await res.json();
+ const text = data.items.slice(0,6).map(i =>
+ `${i.road}、${i.direction}、${i.detail}`
+ ).join("。");
+ const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=ja&q=${encodeURIComponent(text)}&client=tw-ob`;
+ document.getElementById("a").src = url;
+ document.getElementById("a").play();
+}
+</script>
+</body>
+</html>

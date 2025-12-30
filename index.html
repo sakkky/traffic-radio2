@@ -15,12 +15,12 @@ button{font-size:28px;padding:25px 40px;border-radius:20px;border:0;background:#
 
 <button onclick="play()">交通情報を聞く</button>
 
-<audio id="a" playsinline></audio>
+<audio id="a" controls playsinline></audio>
 
 <script>
 function play(){
  const a=document.getElementById("a");
- a.src="https://radiko.jp/share/?sid=TBS&t=live";
+ a.src="https://radiko.jp/v2/api/ts/playlist.m3u8?station_id=TBS";
  a.play();
 }
 </script>

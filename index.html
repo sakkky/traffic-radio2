@@ -2,25 +2,23 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>首都圏 交通ラジオ</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>交通ラジオ</title>
 <style>
-body{font-family:-apple-system;text-align:center;background:#111;color:#fff}
-button{font-size:28px;padding:25px 40px;border-radius:20px;border:0;background:#ffcc00;color:#000}
+body{background:#111;color:#fff;font-family:-apple-system;text-align:center}
+button{font-size:28px;padding:25px 40px;border-radius:20px;border:0;background:#00ff9c;color:#000}
 </style>
 </head>
 <body>
 
-<h2>首都圏リアルタイム交通ラジオ</h2>
-
+<h2>首都圏 交通ラジオ</h2>
 <button onclick="play()">交通情報を聞く</button>
-
 <audio id="a" controls playsinline></audio>
 
 <script>
 function play(){
  const a=document.getElementById("a");
- a.src="https://radiko.jp/v2/api/ts/playlist.m3u8?station_id=TBS";
+ a.src="https://radio-stream.nhk.jp/hls/live/2023229/nhkr1_tokyo/master.m3u8";
  a.play();
 }
 </script>

@@ -1,27 +1,108 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>交通ラジオ</title>
-<style>
-body{background:#111;color:#fff;font-family:-apple-system;text-align:center}
-button{font-size:28px;padding:25px 40px;border-radius:20px;border:0;background:#00ff9c;color:#000}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>渋滞情報 音声サービス（GitHub Pages版）</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f0f0f0; text-align: center; }
+        button { padding: 15px 30px; font-size: 20px; margin: 15px; cursor: pointer; }
+        #status { margin-top: 30px; font-size: 18px; color: #333; white-space: pre-wrap; }
+    </style>
 </head>
 <body>
+    <h1>運転中用 渋滞音声サービス</h1>
+    <p>横浜駅 → 東京駅の例（高速道路優先、リアルタイム渋滞考慮）</p>
+    <button id="start">開始（音声ループ）</button>
+    <button id="stop">停止</button>
+    <div id="status">待機中...（開始ボタンを押してください）</div>
 
-<h2>首都圏 交通ラジオ</h2>
-<button onclick="play()">交通情報を聞く</button>
-<audio id="a" controls playsinline></audio>
+    <script>
+        const API_KEY = 'AIzaSyB7_1P4xX-dn3-deQoT8NisGzGDkM_Jd2Y';  // ← ここにGoogle Cloudで作成した長いAPIキーを貼り付けてください！
+        // 例: const API_KEY = 'AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
 
-<script>
-function play(){
- const a=document.getElementById("a");
- a.src="https://radio-stream.nhk.jp/hls/live/2023229/nhkr1_tokyo/master.m3u8";
- a.play();
-}
-</script>
+        const STATUS = document.getElementById('status');
+        const synth = window.speechSynthesis;
+        let isSpeaking = false;
 
+        async function getTrafficText() {
+            try {
+                const origin = '横浜駅';
+                const destination = '東京駅';
+                const departureTime = 'now';  // 現在の交通状況を考慮
+
+                const url = `https://maps.googleapis.com/maps/api/directions/json?` +
+                            `origin=${encodeURIComponent(origin)}&` +
+                            `destination=${encodeURIComponent(destination)}&` +
+                            `mode=driving&` +
+                            `departure_time=${departureTime}&` +
+                            `traffic_model=best_guess&` +  // 最適な渋滞予測
+                            `key=${API_KEY}`;
+
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status !== 'OK') {
+                    return `エラー: ${data.status}（APIキーや制限を確認してください）`;
+                }
+
+                const route = data.routes[0];
+                const leg = route.legs[0];
+
+                const normalDuration = leg.duration.text;  // 通常所要時間
+                let trafficDuration = leg.duration_in_traffic?.text || normalDuration;  // 渋滞考慮（非推奨だがまだ使える）
+
+                const summary = route.summary || '首都高速など';
+                const distance = leg.distance.text;
+
+                let text = `現在の渋滞情報: ${summary}ルート。` +
+                           `距離${distance}。通常${normalDuration}ですが、` +
+                           `渋滞考慮で${trafficDuration}です。`;
+
+                // 渋滞がひどい場合に強調
+                if (trafficDuration.includes('時間') || 
+                    (parseFloat(trafficDuration) > parseFloat(normalDuration) * 1.2)) {
+                    text += ' かなり渋滞しています！注意して運転してください。';
+                }
+
+                return text;
+            } catch (e) {
+                return `取得失敗: ${e.message}（ネットワークやAPIを確認）`;
+            }
+        }
+
+        async function speak() {
+            if (isSpeaking) return;
+            isSpeaking = true;
+
+            const text = await getTrafficText();
+            STATUS.textContent = text;
+
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'ja-JP';
+            utterance.rate = 1.1;   // 少し速めに（調整可）
+            utterance.pitch = 1.0;
+            utterance.volume = 1.0;
+
+            utterance.onend = () => {
+                isSpeaking = false;
+                // 10分後に自動再取得＆読み上げ（600000ms = 10分）
+                setTimeout(speak, 600000);
+            };
+
+            synth.speak(utterance);
+        }
+
+        document.getElementById('start').onclick = () => {
+            STATUS.textContent = '取得中...';
+            speak();
+        };
+
+        document.getElementById('stop').onclick = () => {
+            synth.cancel();
+            STATUS.textContent = '停止しました。再開するには開始ボタンを押してください。';
+            isSpeaking = false;
+        };
+    </script>
 </body>
 </html>

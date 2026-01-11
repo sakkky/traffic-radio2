@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>渋滞情報 音声サービス（GitHub Pages版）</title>
+    <title>東京23区 交通量音声サービス（JARTIC）</title>
     <style>
         body { font-family: sans-serif; padding: 20px; background: #f0f0f0; text-align: center; }
         button { padding: 15px 30px; font-size: 20px; margin: 15px; cursor: pointer; }
@@ -11,63 +11,68 @@
     </style>
 </head>
 <body>
-    <h1>運転中用 渋滞音声サービス</h1>
-    <p>横浜駅 → 東京駅の例（高速道路優先、リアルタイム渋滞考慮）</p>
+    <h1>東京23区 交通量情報 音声</h1>
+    <p>23区内の国道交通量を5分更新でチェック（平均値・簡易渋滞推定）</p>
     <button id="start">開始（音声ループ）</button>
     <button id="stop">停止</button>
     <div id="status">待機中...（開始ボタンを押してください）</div>
 
     <script>
-        const API_KEY = 'AIzaSyB7_1P4xX-dn3-deQoT8NisGzGDkM_Jd2Y';  // ← ここにGoogle Cloudで作成した長いAPIキーを貼り付けてください！
-        // 例: const API_KEY = 'AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX';
-
         const STATUS = document.getElementById('status');
         const synth = window.speechSynthesis;
         let isSpeaking = false;
 
         async function getTrafficText() {
             try {
-                const origin = '横浜駅';
-                const destination = '東京駅';
-                const departureTime = 'now';  // 現在の交通状況を考慮
+                // 東京23区向け BBOX（緯度経度範囲）
+                const min_x = 139.45;
+                const min_y = 35.55;
+                const max_x = 139.93;
+                const max_y = 35.82;
 
-                const url = `https://maps.googleapis.com/maps/api/directions/json?` +
-                            `origin=${encodeURIComponent(origin)}&` +
-                            `destination=${encodeURIComponent(destination)}&` +
-                            `mode=driving&` +
-                            `departure_time=${departureTime}&` +
-                            `traffic_model=best_guess&` +  // 最適な渋滞予測
-                            `key=${API_KEY}`;
+                const url = `https://api.jartic-open-traffic.org/geoserver/wfs?` +
+                            `service=WFS&version=2.0.0&request=GetFeature&` +
+                            `typeNames=t_travospublic_measure_5m&` +  // 5分間交通量
+                            `outputFormat=application/json&` +
+                            `srsName=EPSG:4326&` +
+                            `cql_filter=道路種別='3' AND ` +  // 一般国道
+                            `BBOX(geom,${min_x},${min_y},${max_x},${max_y},'EPSG:4326')`;
 
                 const response = await fetch(url);
                 const data = await response.json();
 
-                if (data.status !== 'OK') {
-                    return `エラー: ${data.status}（APIキーや制限を確認してください）`;
+                if (!data.features || data.features.length === 0) {
+                    return 'データ取得失敗：23区内の観測地点が見つかりませんでした（範囲調整を試して）';
                 }
 
-                const route = data.routes[0];
-                const leg = route.legs[0];
+                // 交通量の平均計算（最新データのみ）
+                let totalVolume = 0;
+                let count = 0;
+                data.features.forEach(f => {
+                    const vol = f.properties['交通量'] || 0;  // プロパティ名は公式で「交通量」または「方向別交通量」など確認
+                    if (vol > 0) {  // 0は無効データ除外
+                        totalVolume += vol;
+                        count++;
+                    }
+                });
 
-                const normalDuration = leg.duration.text;  // 通常所要時間
-                let trafficDuration = leg.duration_in_traffic?.text || normalDuration;  // 渋滞考慮（非推奨だがまだ使える）
+                const avgVolume = count > 0 ? Math.round(totalVolume / count) : 0;
+                let text = `東京23区内の国道交通量（平均）：${avgVolume}台/5分間。`;
 
-                const summary = route.summary || '首都高速など';
-                const distance = leg.distance.text;
-
-                let text = `現在の渋滞情報: ${summary}ルート。` +
-                           `距離${distance}。通常${normalDuration}ですが、` +
-                           `渋滞考慮で${trafficDuration}です。`;
-
-                // 渋滞がひどい場合に強調
-                if (trafficDuration.includes('時間') || 
-                    (parseFloat(trafficDuration) > parseFloat(normalDuration) * 1.2)) {
-                    text += ' かなり渋滞しています！注意して運転してください。';
+                // 簡易渋滞判定（基準は目安・調整してください）
+                if (avgVolume < 400) {
+                    text += ' 交通量がかなり少なく、渋滞が発生している可能性が高いです。注意運転を！';
+                } else if (avgVolume < 800) {
+                    text += ' 交通量が少なく、混雑気味です。';
+                } else if (avgVolume > 1500) {
+                    text += ' 交通量が多く、スムーズに流れています。';
+                } else {
+                    text += ' 標準的な交通量です。';
                 }
 
                 return text;
             } catch (e) {
-                return `取得失敗: ${e.message}（ネットワークやAPIを確認）`;
+                return `取得エラー: ${e.message}（ネットワーク確認 or API変更の可能性）`;
             }
         }
 
@@ -80,27 +85,26 @@
 
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'ja-JP';
-            utterance.rate = 1.1;   // 少し速めに（調整可）
+            utterance.rate = 1.1;
             utterance.pitch = 1.0;
             utterance.volume = 1.0;
 
             utterance.onend = () => {
                 isSpeaking = false;
-                // 10分後に自動再取得＆読み上げ（600000ms = 10分）
-                setTimeout(speak, 600000);
+                setTimeout(speak, 600000); // 10分後自動更新
             };
 
             synth.speak(utterance);
         }
 
         document.getElementById('start').onclick = () => {
-            STATUS.textContent = '取得中...';
+            STATUS.textContent = '取得中...（23区データ取得）';
             speak();
         };
 
         document.getElementById('stop').onclick = () => {
             synth.cancel();
-            STATUS.textContent = '停止しました。再開するには開始ボタンを押してください。';
+            STATUS.textContent = '停止しました。';
             isSpeaking = false;
         };
     </script>
